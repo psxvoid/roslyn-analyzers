@@ -82,15 +82,13 @@ namespace Microsoft.NetCore.Analyzers.Runtime
                     return;
                 }
 
-                var paramAnalyzer = new ParameterAnalyzer(jsonConstructorAttributeNamedSymbol);
-
                 context.RegisterSymbolStartAction((context) =>
                 {
                     var constructors = ((INamedTypeSymbol)context.Symbol).InstanceConstructors;
 
                     foreach (var ctor in constructors)
                     {
-                        if (paramAnalyzer.ShouldAnalyzeMethod(ctor))
+                        if (ParameterAnalyzer.ShouldAnalyzeMethod(ctor, jsonConstructorAttributeNamedSymbol))
                         {
                             context.RegisterOperationAction(
                                 context => ParameterAnalyzer.AnalyzeOperationAndReport(context),
@@ -109,15 +107,8 @@ namespace Microsoft.NetCore.Analyzers.Runtime
             UnreferencedParameter,
         }
 
-        private sealed class ParameterAnalyzer
+        private static class ParameterAnalyzer
         {
-            private readonly INamedTypeSymbol _jsonConstructorAttributeInfoType;
-
-            public ParameterAnalyzer(INamedTypeSymbol jsonConstructorAttributeInfoType)
-            {
-                _jsonConstructorAttributeInfoType = jsonConstructorAttributeInfoType;
-            }
-
             public static void AnalyzeOperationAndReport(OperationAnalysisContext context)
             {
                 var operation = (IParameterReferenceOperation)context.Operation;
@@ -159,7 +150,7 @@ namespace Microsoft.NetCore.Analyzers.Runtime
                 }
             }
 
-            public bool ShouldAnalyzeMethod(IMethodSymbol method)
+            public static bool ShouldAnalyzeMethod(IMethodSymbol method, INamedTypeSymbol jsonConstructorAttribute)
             {
                 // We only care about constructors with parameters.
                 if (method.Parameters.IsEmpty)
@@ -168,7 +159,7 @@ namespace Microsoft.NetCore.Analyzers.Runtime
                 }
 
                 // We only care about constructors that are marked with JsonConstructor attribute.
-                return this.IsJsonConstructor(method);
+                return ParameterAnalyzer.IsJsonConstructor(method, jsonConstructorAttribute);
             }
 
             private static bool IsParamMatchesReferencedMemberName(IParameterSymbol param, ISymbol referencedMember)
@@ -184,9 +175,11 @@ namespace Microsoft.NetCore.Analyzers.Runtime
                 return paramWords.SequenceEqual(memberWords, StringComparer.OrdinalIgnoreCase);
             }
 
-            private bool IsJsonConstructor([NotNullWhen(returnValue: true)] IMethodSymbol? method)
+            private static bool IsJsonConstructor(
+                [NotNullWhen(returnValue: true)] IMethodSymbol? method,
+                INamedTypeSymbol jsonConstructorAttribute)
                 => method.IsConstructor() &&
-                    method.HasAttribute(this._jsonConstructorAttributeInfoType);
+                    method.HasAttribute(jsonConstructorAttribute);
 
             private static IMemberReferenceOperation? TryGetMemberReferenceOperation(IParameterReferenceOperation paramOperation)
             {
